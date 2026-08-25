@@ -5,10 +5,10 @@ import type {
   FilterMeta,
 } from "../types/dashboard";
 
+// In the unified Nanyang app, keep API calls relative to the current
+// frontend origin. Vite proxies /api to the shared FastAPI backend.
 const API_BASE_URL =
-  import.meta.env
-    .VITE_API_BASE_URL ||
-  `${window.location.protocol}//${window.location.hostname}:8001`;
+  import.meta.env.VITE_API_BASE_URL || "";
 
 const api = axios.create({
   baseURL: API_BASE_URL,
