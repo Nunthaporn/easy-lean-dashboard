@@ -61,19 +61,12 @@ export default function HorizontalEffChart({
         if (!row) return "";
 
         const eff = row.eff_pct ?? 0;
-        const status =
-          eff >= 0.8
-            ? "Excellent"
-            : eff >= TARGET
-              ? "Above Target"
-              : "Below Target";
 
         return `
           <div style="min-width:220px">
             <strong>${row.factory}</strong><br/>
             EFF: ${(eff * 100).toFixed(1)}%<br/>
-            Target: 65.0%<br/>
-            Status: ${status}
+            Target: 65.0%
             ${productTypeHtml(row.product_types)}
           </div>
         `;
@@ -83,7 +76,7 @@ export default function HorizontalEffChart({
     grid: {
       left: 50,
       right: 55,
-      top: 15,
+      top: 28,
       bottom: 35,
       containLabel: true,
     },
@@ -145,8 +138,15 @@ export default function HorizontalEffChart({
             {
               xAxis: TARGET,
               label: {
+                show: true,
                 formatter: "Target 65%",
-                position: "end",
+                position: "insideEndTop",
+                distance: 6,
+                color: "#3e66b3",
+                fontWeight: 600,
+                backgroundColor: "rgba(255,255,255,0.92)",
+                padding: [2, 4],
+                borderRadius: 3,
               },
             },
           ],
