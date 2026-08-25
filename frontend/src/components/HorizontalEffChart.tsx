@@ -8,7 +8,6 @@ interface ProductTypeEff {
 export interface FactoryEffRow {
   factory: string;
   eff_pct: number | null;
-
   product_types?: ProductTypeEff[];
 }
 
@@ -20,6 +19,32 @@ interface Props {
 
 const TARGET = 0.65;
 
+function productTypeHtml(productTypes?: ProductTypeEff[]) {
+  if (!productTypes?.length) {
+    return `<div style="margin-top:8px;color:#94a3b8">Eff% by Product Type: No data</div>`;
+  }
+
+  const rows = productTypes
+    .map((item) => {
+      const value = item.eff_pct == null
+        ? "-"
+        : `${(Number(item.eff_pct) * 100).toFixed(1)}%`;
+
+      return `<div style="display:flex;justify-content:space-between;gap:18px;margin-top:3px">
+        <span>${item.product_type}</span>
+        <strong>${value}</strong>
+      </div>`;
+    })
+    .join("");
+
+  return `
+    <div style="margin-top:9px;padding-top:7px;border-top:1px solid #e2e8f0">
+      <strong>Eff% by Product Type</strong>
+      ${rows}
+    </div>
+  `;
+}
+
 export default function HorizontalEffChart({
   data,
   selectedFactory,
@@ -30,14 +55,12 @@ export default function HorizontalEffChart({
 
     tooltip: {
       trigger: "item",
-
+      confine: true,
       formatter: (params: any) => {
         const row = data[params.dataIndex];
-
         if (!row) return "";
 
         const eff = row.eff_pct ?? 0;
-
         const status =
           eff >= 0.8
             ? "Excellent"
@@ -46,10 +69,13 @@ export default function HorizontalEffChart({
               : "Below Target";
 
         return `
-          <strong>${row.factory}</strong><br/>
-          EFF: ${(eff * 100).toFixed(1)}%<br/>
-          Target: 65.0%<br/>
-          Status: ${status}
+          <div style="min-width:220px">
+            <strong>${row.factory}</strong><br/>
+            EFF: ${(eff * 100).toFixed(1)}%<br/>
+            Target: 65.0%<br/>
+            Status: ${status}
+            ${productTypeHtml(row.product_types)}
+          </div>
         `;
       },
     },
@@ -66,16 +92,11 @@ export default function HorizontalEffChart({
       type: "value",
       min: 0,
       max: 1,
-
       axisLabel: {
-        formatter: (value: number) =>
-          `${Math.round(value * 100)}%`,
+        formatter: (value: number) => `${Math.round(value * 100)}%`,
       },
-
       splitLine: {
-        lineStyle: {
-          color: "#e7ebf2",
-        },
+        lineStyle: { color: "#e7ebf2" },
       },
     },
 
@@ -83,14 +104,8 @@ export default function HorizontalEffChart({
       type: "category",
       inverse: true,
       data: data.map((row) => row.factory),
-
-      axisTick: {
-        show: false,
-      },
-
-      axisLine: {
-        show: false,
-      },
+      axisTick: { show: false },
+      axisLine: { show: false },
     },
 
     series: [
@@ -98,22 +113,16 @@ export default function HorizontalEffChart({
         name: "EFF%",
         type: "bar",
         barWidth: 24,
-
         data: data.map((row) => {
           const value = row.eff_pct ?? 0;
-
-          const active =
-            !selectedFactory ||
-            selectedFactory === row.factory;
+          const active = !selectedFactory || selectedFactory === row.factory;
 
           return {
             value,
             factory: row.factory,
-
             itemStyle: {
               borderRadius: [0, 6, 6, 0],
               opacity: active ? 1 : 0.25,
-
               color:
                 value >= 0.8
                   ? "#46b96a"
@@ -123,30 +132,24 @@ export default function HorizontalEffChart({
             },
           };
         }),
-
         label: {
           show: true,
           position: "right",
-
           formatter: (params: any) =>
             `${(Number(params.value) * 100).toFixed(1)}%`,
         },
-
         markLine: {
           silent: true,
           symbol: "none",
-
           data: [
             {
               xAxis: TARGET,
-
               label: {
                 formatter: "Target 65%",
                 position: "end",
               },
             },
           ],
-
           lineStyle: {
             type: "dashed",
             width: 2,
@@ -158,16 +161,12 @@ export default function HorizontalEffChart({
   };
 
   const handleClick = (params: any) => {
-    if (
-      params.componentType !== "series" ||
-      params.seriesType !== "bar"
-    ) {
+    if (params.componentType !== "series" || params.seriesType !== "bar") {
       return;
     }
 
     const selected =
-      params.data?.factory ??
-      data[params.dataIndex]?.factory;
+      params.data?.factory ?? data[params.dataIndex]?.factory;
 
     if (selected && onSelect) {
       onSelect(String(selected));
@@ -179,13 +178,8 @@ export default function HorizontalEffChart({
       option={option}
       notMerge={true}
       lazyUpdate={true}
-      style={{
-        width: "100%",
-        height: "290px",
-      }}
-      onEvents={{
-        click: handleClick,
-      }}
+      style={{ width: "100%", height: "290px" }}
+      onEvents={{ click: handleClick }}
     />
   );
 }
