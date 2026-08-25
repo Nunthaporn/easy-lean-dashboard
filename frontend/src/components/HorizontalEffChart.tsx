@@ -76,10 +76,28 @@ export default function HorizontalEffChart({
     grid: {
       left: 50,
       right: 55,
-      top: 28,
+      top: 42,
       bottom: 35,
       containLabel: true,
     },
+
+    graphic: [
+      {
+        type: "text",
+        left: "65%",
+        top: 8,
+        silent: true,
+        z: 100,
+        style: {
+          text: "Target 65%",
+          fill: "#3e66b3",
+          font: "600 12px sans-serif",
+          textAlign: "center",
+          backgroundColor: "rgba(255,255,255,0.94)",
+          padding: [2, 4],
+        },
+      },
+    ],
 
     xAxis: {
       type: "value",
@@ -134,20 +152,12 @@ export default function HorizontalEffChart({
         markLine: {
           silent: true,
           symbol: "none",
+          label: {
+            show: false,
+          },
           data: [
             {
               xAxis: TARGET,
-              label: {
-                show: true,
-                formatter: "Target 65%",
-                position: "insideEndTop",
-                distance: 6,
-                color: "#3e66b3",
-                fontWeight: 600,
-                backgroundColor: "rgba(255,255,255,0.92)",
-                padding: [2, 4],
-                borderRadius: 3,
-              },
             },
           ],
           lineStyle: {
