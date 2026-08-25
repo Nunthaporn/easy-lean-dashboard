@@ -5,17 +5,6 @@ from sqlalchemy import text
 # SAFE EXPRESSIONS
 # =========================================================
 
-# แปลงค่าจาก PostgreSQL เป็น numeric อย่างปลอดภัย
-#
-# รองรับ:
-#   1234
-#   1234.56
-#   "1234"
-#   "1,234.56"
-#   ""
-#   NULL
-#
-# ค่าว่างจะกลายเป็น NULL
 def numeric_expr(column: str) -> str:
     return f"""
     NULLIF(
@@ -36,15 +25,65 @@ MAN_OUT = numeric_expr('e."Man_%Out"')
 
 
 # =========================================================
+# DISPLAY LINE
+#
+# EA ไม่มี EasyLean Line
+# จึงใช้ Line แทน
+#
+# Factory อื่นใช้ EasyLean Line
+# =========================================================
+
+DISPLAY_LINE = """
+CASE
+    WHEN e."FACTORY"::text = 'EA'
+    THEN NULLIF(
+        BTRIM(e."Line"::text),
+        ''
+    )
+
+    ELSE NULLIF(
+        BTRIM(e."EasyLean Line"::text),
+        ''
+    )
+END
+"""
+
+
+# =========================================================
 # BASE FILTER
 # =========================================================
 
-BASE_FILTER = """
-    e."Date"::date BETWEEN :start_date AND :end_date
+BASE_FILTER = f"""
+    e."Date"::date
+        BETWEEN :start_date
+        AND :end_date
 
     AND (
         CAST(:factory AS text) IS NULL
-        OR e."FACTORY"::text = CAST(:factory AS text)
+        OR e."FACTORY"::text =
+           CAST(:factory AS text)
+    )
+
+    AND (
+        CAST(:selected_factory AS text) IS NULL
+        OR e."FACTORY"::text =
+           CAST(:selected_factory AS text)
+    )
+
+    AND (
+        CAST(:selected_line AS text) IS NULL
+
+        OR (
+            {DISPLAY_LINE}
+            =
+            CAST(:selected_line AS text)
+        )
+    )
+
+    AND (
+        CAST(:selected_line_factory AS text) IS NULL
+        OR e."FACTORY"::text =
+           CAST(:selected_line_factory AS text)
     )
 """
 
@@ -58,10 +97,20 @@ WITH filtered AS (
     SELECT
         e.*,
 
-        {MIN_OUTPUT} AS min_output_num,
-        {MIN_INPUT} AS min_input_num,
-        {OUTPUT_PCS} AS output_pcs_num,
-        {MAN_OUT} AS man_out_num
+        {MIN_OUTPUT}
+            AS min_output_num,
+
+        {MIN_INPUT}
+            AS min_input_num,
+
+        {OUTPUT_PCS}
+            AS output_pcs_num,
+
+        {MAN_OUT}
+            AS man_out_num,
+
+        {DISPLAY_LINE}
+            AS display_line
 
     FROM public.teffdata e
 
@@ -70,7 +119,9 @@ WITH filtered AS (
 
 latest AS (
     SELECT
-        MAX("Date"::date) AS data_as_of
+        MAX(
+            "Date"::date
+        ) AS data_as_of
 
     FROM filtered
 )
@@ -78,85 +129,91 @@ latest AS (
 SELECT
     latest.data_as_of,
 
-    /* ============================================
+    /* =============================================
        EFF% EZLcard
+       ============================================= */
 
-       Power BI:
-       SumOutmin EZL / SumInmin
-       EasyLean Line ต้องไม่ blank
-       ============================================ */
-    (
-        SUM(filtered.min_output_num)
-        FILTER (
-            WHERE
-                filtered."EasyLean Line" IS NOT NULL
-                AND BTRIM(filtered."EasyLean Line"::text) <> ''
-        )
+    SUM(
+        filtered.min_output_num
+    )
+    FILTER (
+        WHERE
+            filtered.display_line IS NOT NULL
     )
     /
     NULLIF(
-        SUM(filtered.min_input_num)
+        SUM(
+            filtered.min_input_num
+        )
         FILTER (
             WHERE
-                filtered."EasyLean Line" IS NOT NULL
-                AND BTRIM(filtered."EasyLean Line"::text) <> ''
+                filtered.display_line IS NOT NULL
         ),
         0
-    ) AS eff_ezlcard,
+    )
+    AS eff_ezlcard,
 
 
-    /* Min Produce
-       ใช้ Min Output ตาม implementation ปัจจุบัน */
-    SUM(filtered.min_output_num) AS min_produce,
+    /* Min Produce */
+
+    SUM(
+        filtered.min_output_num
+    )
+    AS min_produce,
 
 
-    /* ============================================
-       PPH
+    /* PPH */
 
-       สูตร DAX เดิม:
-       SumInmin / Sum Unique Man
-       / 60
-       แล้วใช้ SumPcs / WorkHr / Sum Unique Man
-
-       ทางคณิตศาสตร์สุดท้ายย่อได้เป็น:
-       SumPcs * 60 / SumInmin
-
-       หมายเหตุ:
-       ถ้าต้องการเลียนแบบ DAX ทีละขั้นแบบ 100%
-       และมีสูตร Sum Unique Man ให้เพิ่มภายหลัง
-       ============================================ */
     (
-        SUM(filtered.output_pcs_num) * 60.0
+        SUM(
+            filtered.output_pcs_num
+        )
+        * 60.0
     )
     /
     NULLIF(
-        SUM(filtered.min_input_num),
+        SUM(
+            filtered.min_input_num
+        ),
         0
-    ) AS pph,
+    )
+    AS pph,
 
 
-    /* SumPcs. */
-    SUM(filtered.output_pcs_num) AS sum_pcs,
+    /* SumPcs */
+
+    SUM(
+        filtered.output_pcs_num
+    )
+    AS sum_pcs,
 
 
-    /* #Of Operator
-       ใช้ SUM(Man_%Out) ตามข้อมูลปัจจุบัน */
-    SUM(filtered.man_out_num) AS operator_count,
+    /* Operator */
+
+    SUM(
+        filtered.man_out_num
+    )
+    AS operator_count,
 
 
     /* CountLine */
+
     COUNT(
         DISTINCT NULLIF(
-            BTRIM(filtered."FAC-LINE"::text),
+            BTRIM(
+                filtered."FAC-LINE"::text
+            ),
             ''
         )
-    ) AS count_line
+    )
+    AS count_line
 
 FROM filtered
 
 CROSS JOIN latest
 
-GROUP BY latest.data_as_of
+GROUP BY
+    latest.data_as_of
 """)
 
 
@@ -165,81 +222,373 @@ GROUP BY latest.data_as_of
 # =========================================================
 
 MONTHLY_BY_LINE_SQL = text(f"""
-SELECT
-    e."FACTORY"::text AS factory,
-
-    SUM({MIN_OUTPUT})
-    /
-    NULLIF(
-        SUM({MIN_INPUT}),
-        0
-    ) AS eff_pct
-
-FROM public.teffdata e
-
-WHERE {BASE_FILTER}
-
-    AND e."FACTORY" IS NOT NULL
-    AND BTRIM(e."FACTORY"::text) <> ''
-
-GROUP BY
-    e."FACTORY"
-
-ORDER BY
-    eff_pct DESC NULLS LAST,
-    factory
-""")
-
-
-# =========================================================
-# EFF Last date by Line
-# =========================================================
-
-LATEST_BY_LINE_SQL = text(f"""
-WITH latest AS (
+WITH mt_so_map AS (
     SELECT
-        MAX(e."Date"::date) AS latest_date
+        BTRIM("SO_8Digit"::text) AS so_8digit,
+
+        MAX(
+            NULLIF(
+                BTRIM("GMT_TYPE"::text),
+                ''
+            )
+        ) AS gmt_type
+
+    FROM public.mt_so
+
+    WHERE
+        "SO_8Digit" IS NOT NULL
+
+        AND BTRIM(
+            "SO_8Digit"::text
+        ) <> ''
+
+    GROUP BY
+        BTRIM("SO_8Digit"::text)
+),
+
+base AS (
+    SELECT
+        e."FACTORY"::text AS factory,
+
+        COALESCE(
+            m.gmt_type,
+            'UNKNOWN'
+        ) AS product_type,
+
+        {MIN_OUTPUT} AS min_output_num,
+
+        {MIN_INPUT} AS min_input_num
 
     FROM public.teffdata e
 
+    LEFT JOIN mt_so_map m
+        ON BTRIM(
+            e."# SO 8digit"::text
+        ) = m.so_8digit
+
     WHERE {BASE_FILTER}
+
+        AND e."FACTORY" IS NOT NULL
+
+        AND BTRIM(
+            e."FACTORY"::text
+        ) <> ''
+),
+
+factory_total AS (
+    SELECT
+        factory,
+
+        SUM(min_output_num)
+        /
+        NULLIF(
+            SUM(min_input_num),
+            0
+        ) AS eff_pct
+
+    FROM base
+
+    GROUP BY
+        factory
+),
+
+product_type_eff AS (
+    SELECT
+        factory,
+        product_type,
+
+        SUM(min_output_num)
+        /
+        NULLIF(
+            SUM(min_input_num),
+            0
+        ) AS eff_pct
+
+    FROM base
+
+    WHERE
+        product_type <> 'UNKNOWN'
+
+    GROUP BY
+        factory,
+        product_type
+),
+
+product_json AS (
+    SELECT
+        factory,
+
+        JSONB_AGG(
+            JSONB_BUILD_OBJECT(
+                'product_type',
+                product_type,
+
+                'eff_pct',
+                eff_pct
+            )
+
+            ORDER BY
+                eff_pct DESC NULLS LAST,
+                product_type
+        ) AS product_types
+
+    FROM product_type_eff
+
+    GROUP BY
+        factory
 )
 
 SELECT
-    e."FACTORY"::text AS factory,
+    f.factory,
 
-    e."EasyLean Line"::text AS line,
+    f.eff_pct,
 
-    SUM({MIN_OUTPUT})
-    /
-    NULLIF(
-        SUM({MIN_INPUT}),
-        0
-    ) AS eff_pct
+    COALESCE(
+        p.product_types,
+        '[]'::jsonb
+    ) AS product_types
 
-FROM public.teffdata e
+FROM factory_total f
 
-CROSS JOIN latest l
-
-WHERE {BASE_FILTER}
-
-    AND e."Date"::date = l.latest_date
-
-    AND e."EasyLean Line" IS NOT NULL
-    AND BTRIM(e."EasyLean Line"::text) <> ''
-
-GROUP BY
-    e."FACTORY",
-    e."EasyLean Line"
+LEFT JOIN product_json p
+    ON p.factory = f.factory
 
 ORDER BY
-    e."FACTORY",
-    e."EasyLean Line"
+    f.eff_pct DESC NULLS LAST,
+    f.factory
 """)
 
+# =========================================================
+# EFF Last date by Line
+#
+# Latest Date แยกตาม Factory
+#
+# EA ใช้ Line
+# Factory อื่นใช้ EasyLean Line
+# =========================================================
 
 # =========================================================
-# EFF% by Year, Month and EasyLean Fac
+# EFF Last date by Line
+#
+# G1/G2/G3/G4/TRM:
+#   ใช้ EasyLean Line
+#
+# EA:
+#   ใช้ Line
+#   และเอาเฉพาะเดือนเดียวกับ end_date เท่านั้น
+# =========================================================
+
+LATEST_BY_LINE_SQL = text(f"""
+WITH mt_so_map AS (
+    SELECT
+        BTRIM("SO_8Digit"::text) AS so_8digit,
+
+        MAX(
+            NULLIF(
+                BTRIM("GMT_TYPE"::text),
+                ''
+            )
+        ) AS gmt_type
+
+    FROM public.mt_so
+
+    WHERE
+        "SO_8Digit" IS NOT NULL
+
+        AND BTRIM(
+            "SO_8Digit"::text
+        ) <> ''
+
+    GROUP BY
+        BTRIM("SO_8Digit"::text)
+),
+
+prepared AS (
+    SELECT
+        e."FACTORY"::text AS factory,
+
+        e."Date"::date AS produce_date,
+
+        {DISPLAY_LINE} AS display_line,
+
+        COALESCE(
+            m.gmt_type,
+            'UNKNOWN'
+        ) AS product_type,
+
+        {MIN_OUTPUT} AS min_output_num,
+
+        {MIN_INPUT} AS min_input_num
+
+    FROM public.teffdata e
+
+    LEFT JOIN mt_so_map m
+        ON BTRIM(
+            e."# SO 8digit"::text
+        ) = m.so_8digit
+
+    WHERE {BASE_FILTER}
+
+        AND e."FACTORY" IS NOT NULL
+
+        AND BTRIM(
+            e."FACTORY"::text
+        ) <> ''
+),
+
+latest_by_factory AS (
+    SELECT
+        factory,
+
+        MAX(
+            produce_date
+        ) AS latest_date
+
+    FROM prepared
+
+    WHERE
+        display_line IS NOT NULL
+
+    GROUP BY
+        factory
+),
+
+latest_data AS (
+    SELECT
+        p.*
+
+    FROM prepared p
+
+    INNER JOIN latest_by_factory l
+        ON p.factory =
+           l.factory
+
+        AND p.produce_date =
+            l.latest_date
+
+    WHERE
+        p.display_line IS NOT NULL
+),
+
+line_total AS (
+    SELECT
+        factory,
+
+        display_line AS line,
+
+        SUM(min_output_num)
+        /
+        NULLIF(
+            SUM(min_input_num),
+            0
+        ) AS eff_pct
+
+    FROM latest_data
+
+    GROUP BY
+        factory,
+        display_line
+),
+
+product_type_eff AS (
+    SELECT
+        factory,
+
+        display_line AS line,
+
+        product_type,
+
+        SUM(min_output_num)
+        /
+        NULLIF(
+            SUM(min_input_num),
+            0
+        ) AS eff_pct
+
+    FROM latest_data
+
+    WHERE
+        product_type <> 'UNKNOWN'
+
+    GROUP BY
+        factory,
+        display_line,
+        product_type
+),
+
+product_json AS (
+    SELECT
+        factory,
+        line,
+
+        JSONB_AGG(
+            JSONB_BUILD_OBJECT(
+                'product_type',
+                product_type,
+
+                'eff_pct',
+                eff_pct
+            )
+
+            ORDER BY
+                eff_pct DESC NULLS LAST,
+                product_type
+        ) AS product_types
+
+    FROM product_type_eff
+
+    GROUP BY
+        factory,
+        line
+)
+
+SELECT
+    l.factory,
+
+    l.line,
+
+    l.eff_pct,
+
+    COALESCE(
+        p.product_types,
+        '[]'::jsonb
+    ) AS product_types
+
+FROM line_total l
+
+LEFT JOIN product_json p
+    ON p.factory =
+       l.factory
+
+    AND p.line =
+        l.line
+
+WHERE
+    l.eff_pct IS NOT NULL
+    AND l.eff_pct > 0
+
+ORDER BY
+    CASE l.factory
+        WHEN 'G1' THEN 1
+        WHEN 'G2' THEN 2
+        WHEN 'G3' THEN 3
+        WHEN 'G4' THEN 4
+        WHEN 'TRM' THEN 5
+        WHEN 'EA' THEN 6
+        ELSE 99
+    END,
+
+    CASE
+        WHEN l.line ~ '^[0-9]+$'
+        THEN l.line::integer
+        ELSE 999999
+    END,
+
+    l.line
+""")
+
+# =========================================================
+# EFF% by Year, Month and Factory
 # =========================================================
 
 MONTHLY_FACTORY_SQL = text(f"""
@@ -250,54 +599,79 @@ SELECT
             e."Date"::date
         ),
         'YYYY-MM'
-    ) AS period,
+    )
+    AS period,
 
-    e."EasyLean Fac"::text AS factory,
+    e."FACTORY"::text
+        AS factory,
 
-    SUM({MIN_OUTPUT})
+    SUM(
+        {MIN_OUTPUT}
+    )
     /
     NULLIF(
-        SUM({MIN_INPUT}),
+        SUM(
+            {MIN_INPUT}
+        ),
         0
-    ) AS eff_pct
+    )
+    AS eff_pct
 
 FROM public.teffdata e
 
 WHERE {BASE_FILTER}
 
-    AND e."EasyLean Fac" IS NOT NULL
-    AND BTRIM(e."EasyLean Fac"::text) <> ''
+    AND e."FACTORY"
+        IS NOT NULL
+
+    AND BTRIM(
+        e."FACTORY"::text
+    ) <> ''
 
 GROUP BY
     DATE_TRUNC(
         'month',
         e."Date"::date
     ),
-    e."EasyLean Fac"
+
+    e."FACTORY"
 
 ORDER BY
     DATE_TRUNC(
         'month',
         e."Date"::date
     ),
-    e."EasyLean Fac"
+
+    CASE e."FACTORY"
+        WHEN 'G1' THEN 1
+        WHEN 'G2' THEN 2
+        WHEN 'G3' THEN 3
+        WHEN 'G4' THEN 4
+        WHEN 'TRM' THEN 5
+        WHEN 'EA' THEN 6
+        ELSE 99
+    END,
+
+    e."FACTORY"
 """)
 
 
 # =========================================================
-# Last 10Days EFF% of EasyLean by Factory
+# Last 10 Days EFF% by Factory
 # =========================================================
 
 LAST_10_DAYS_SQL = text(f"""
 WITH filtered_dates AS (
     SELECT DISTINCT
-        e."Date"::date AS d
+        e."Date"::date
+            AS d
 
     FROM public.teffdata e
 
     WHERE {BASE_FILTER}
 
-    ORDER BY d DESC
+    ORDER BY
+        d DESC
 
     LIMIT 10
 )
@@ -306,36 +680,59 @@ SELECT
     TO_CHAR(
         e."Date"::date,
         'YYYY-MM-DD'
-    ) AS period,
+    )
+    AS period,
 
-    e."EasyLean Fac"::text AS factory,
+    e."FACTORY"::text
+        AS factory,
 
-    SUM({MIN_OUTPUT})
+    SUM(
+        {MIN_OUTPUT}
+    )
     /
     NULLIF(
-        SUM({MIN_INPUT}),
+        SUM(
+            {MIN_INPUT}
+        ),
         0
-    ) AS eff_pct
+    )
+    AS eff_pct
 
 FROM public.teffdata e
 
 WHERE {BASE_FILTER}
 
-    AND e."Date"::date IN (
-        SELECT d
-        FROM filtered_dates
-    )
+    AND e."Date"::date
+        IN (
+            SELECT d
+            FROM filtered_dates
+        )
 
-    AND e."EasyLean Fac" IS NOT NULL
-    AND BTRIM(e."EasyLean Fac"::text) <> ''
+    AND e."FACTORY"
+        IS NOT NULL
+
+    AND BTRIM(
+        e."FACTORY"::text
+    ) <> ''
 
 GROUP BY
     e."Date"::date,
-    e."EasyLean Fac"
+    e."FACTORY"
 
 ORDER BY
     e."Date"::date,
-    e."EasyLean Fac"
+
+    CASE e."FACTORY"
+        WHEN 'G1' THEN 1
+        WHEN 'G2' THEN 2
+        WHEN 'G3' THEN 3
+        WHEN 'G4' THEN 4
+        WHEN 'TRM' THEN 5
+        WHEN 'EA' THEN 6
+        ELSE 99
+    END,
+
+    e."FACTORY"
 """)
 
 
@@ -345,19 +742,33 @@ ORDER BY
 
 FILTERS_SQL = text("""
 SELECT
-    MIN(e."Date"::date) AS min_date,
+    MIN(
+        e."Date"::date
+    )
+    AS min_date,
 
-    MAX(e."Date"::date) AS max_date,
+    MAX(
+        e."Date"::date
+    )
+    AS max_date,
 
     ARRAY_AGG(
-        DISTINCT e."FACTORY"::text
-        ORDER BY e."FACTORY"::text
+        DISTINCT
+        e."FACTORY"::text
+
+        ORDER BY
+        e."FACTORY"::text
     )
     FILTER (
         WHERE
-            e."FACTORY" IS NOT NULL
-            AND BTRIM(e."FACTORY"::text) <> ''
-    ) AS factories
+            e."FACTORY"
+                IS NOT NULL
+
+            AND BTRIM(
+                e."FACTORY"::text
+            ) <> ''
+    )
+    AS factories
 
 FROM public.teffdata e
 """)
@@ -376,8 +787,12 @@ SELECT
 FROM information_schema.columns
 
 WHERE
-    table_schema = 'public'
-    AND table_name = 'teffdata'
+    table_schema =
+        'public'
 
-ORDER BY ordinal_position
+    AND table_name =
+        'teffdata'
+
+ORDER BY
+    ordinal_position
 """)

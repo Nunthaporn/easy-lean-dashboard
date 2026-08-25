@@ -13,3 +13,10 @@ export type FactoryEff = { factory: string; eff_pct: number | null }
 export type LatestLine = { factory: string | null; line: string; eff_pct: number | null }
 export type PeriodFactory = { period: string; factory: string; eff_pct: number | null }
 export type FilterMeta = { min_date: string | null; max_date: string | null; factories: string[] }
+export interface DashboardResponse {
+  summary: Summary;
+  monthly: FactoryEff[];
+  latest: LatestLine[];
+  monthlyFactory: PeriodFactory[];
+  last10: PeriodFactory[];
+}

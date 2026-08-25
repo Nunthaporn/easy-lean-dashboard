@@ -1,10 +1,15 @@
-// frontend/src/components/HorizontalEffChart.tsx
-
 import ReactECharts from "echarts-for-react";
+
+interface ProductTypeEff {
+  product_type: string;
+  eff_pct: number | null;
+}
 
 export interface FactoryEffRow {
   factory: string;
   eff_pct: number | null;
+
+  product_types?: ProductTypeEff[];
 }
 
 interface Props {
@@ -25,11 +30,14 @@ export default function HorizontalEffChart({
 
     tooltip: {
       trigger: "item",
+
       formatter: (params: any) => {
         const row = data[params.dataIndex];
+
         if (!row) return "";
 
         const eff = row.eff_pct ?? 0;
+
         const status =
           eff >= 0.8
             ? "Excellent"
@@ -58,9 +66,12 @@ export default function HorizontalEffChart({
       type: "value",
       min: 0,
       max: 1,
+
       axisLabel: {
-        formatter: (value: number) => `${Math.round(value * 100)}%`,
+        formatter: (value: number) =>
+          `${Math.round(value * 100)}%`,
       },
+
       splitLine: {
         lineStyle: {
           color: "#e7ebf2",
@@ -72,9 +83,11 @@ export default function HorizontalEffChart({
       type: "category",
       inverse: true,
       data: data.map((row) => row.factory),
+
       axisTick: {
         show: false,
       },
+
       axisLine: {
         show: false,
       },
@@ -88,8 +101,10 @@ export default function HorizontalEffChart({
 
         data: data.map((row) => {
           const value = row.eff_pct ?? 0;
+
           const active =
-            !selectedFactory || selectedFactory === row.factory;
+            !selectedFactory ||
+            selectedFactory === row.factory;
 
           return {
             value,
@@ -98,6 +113,7 @@ export default function HorizontalEffChart({
             itemStyle: {
               borderRadius: [0, 6, 6, 0],
               opacity: active ? 1 : 0.25,
+
               color:
                 value >= 0.8
                   ? "#46b96a"
@@ -111,6 +127,7 @@ export default function HorizontalEffChart({
         label: {
           show: true,
           position: "right",
+
           formatter: (params: any) =>
             `${(Number(params.value) * 100).toFixed(1)}%`,
         },
@@ -118,15 +135,18 @@ export default function HorizontalEffChart({
         markLine: {
           silent: true,
           symbol: "none",
+
           data: [
             {
               xAxis: TARGET,
+
               label: {
                 formatter: "Target 65%",
                 position: "end",
               },
             },
           ],
+
           lineStyle: {
             type: "dashed",
             width: 2,
@@ -138,21 +158,34 @@ export default function HorizontalEffChart({
   };
 
   const handleClick = (params: any) => {
-    const factory =
+    if (
+      params.componentType !== "series" ||
+      params.seriesType !== "bar"
+    ) {
+      return;
+    }
+
+    const selected =
       params.data?.factory ??
       data[params.dataIndex]?.factory;
 
-    if (factory && onSelect) {
-      onSelect(String(factory));
+    if (selected && onSelect) {
+      onSelect(String(selected));
     }
   };
 
   return (
     <ReactECharts
       option={option}
-      notMerge
-      style={{ width: "100%", height: "300px" }}
-      onEvents={{ click: handleClick }}
+      notMerge={true}
+      lazyUpdate={true}
+      style={{
+        width: "100%",
+        height: "290px",
+      }}
+      onEvents={{
+        click: handleClick,
+      }}
     />
   );
 }

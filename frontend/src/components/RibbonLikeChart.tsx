@@ -1,5 +1,3 @@
-// frontend/src/components/RibbonLikeChart.tsx
-
 import ReactECharts from "echarts-for-react";
 
 interface Row {
@@ -10,7 +8,15 @@ interface Row {
 
 interface Props {
   data: Row[];
+
   mode?: "monthly" | "daily";
+
+  selectedFactory?:
+    string | null;
+
+  onFactorySelect?: (
+    factory: string
+  ) => void;
 }
 
 const TARGET = 0.65;
@@ -18,46 +24,100 @@ const TARGET = 0.65;
 export default function RibbonLikeChart({
   data,
   mode = "monthly",
+  selectedFactory,
+  onFactorySelect,
 }: Props) {
   const periods = Array.from(
-    new Set(data.map((row) => row.period))
+    new Set(
+      data.map(
+        (row) => row.period
+      )
+    )
   ).sort();
 
   const factories = Array.from(
-    new Set(data.map((row) => row.factory))
+    new Set(
+      data.map(
+        (row) => row.factory
+      )
+    )
   );
 
-  const series = factories.map((factory) => ({
-    name: factory,
-    type: "line",
-    smooth: true,
-    symbol: "circle",
-    symbolSize: 6,
-    lineStyle: {
-      width: 3,
-    },
-    emphasis: {
-      focus: "series",
-    },
+  const factorySeries =
+    factories.map((factory) => {
+      const active =
+        !selectedFactory ||
+        selectedFactory ===
+          factory;
 
-    data: periods.map((period) => {
-      const row = data.find(
-        (item) =>
-          item.period === period &&
-          item.factory === factory
-      );
+      return {
+        name: factory,
 
-      return row?.eff_pct ?? null;
-    }),
-  }));
+        type: "line",
+
+        smooth: true,
+
+        symbol: "circle",
+
+        symbolSize:
+          active ? 7 : 5,
+
+        lineStyle: {
+          width:
+            active
+              ? 3
+              : 2,
+
+          opacity:
+            active
+              ? 1
+              : 0.18,
+        },
+
+        itemStyle: {
+          opacity:
+            active
+              ? 1
+              : 0.18,
+        },
+
+        emphasis: {
+          focus: "series",
+        },
+
+        data:
+          periods.map(
+            (period) => {
+              const row =
+                data.find(
+                  (item) =>
+                    item.period ===
+                      period &&
+                    item.factory ===
+                      factory
+                );
+
+              return (
+                row?.eff_pct ??
+                null
+              );
+            }
+          ),
+      };
+    });
 
   const option = {
     tooltip: {
       trigger: "axis",
-      valueFormatter: (value: number) =>
+
+      valueFormatter: (
+        value: number
+      ) =>
         value == null
           ? "-"
-          : `${(Number(value) * 100).toFixed(1)}%`,
+          : `${(
+              Number(value) * 100
+            ).toFixed(1)}%`,
     },
 
     legend: {
@@ -77,9 +137,15 @@ export default function RibbonLikeChart({
       type: "category",
       boundaryGap: false,
       data: periods,
+
       axisLabel: {
-        formatter: (value: string) => {
-          if (mode === "monthly") {
+        formatter: (
+          value: string
+        ) => {
+          if (
+            mode ===
+            "monthly"
+          ) {
             return value;
           }
 
@@ -91,10 +157,16 @@ export default function RibbonLikeChart({
     yAxis: {
       type: "value",
       min: 0,
+
       axisLabel: {
-        formatter: (value: number) =>
-          `${Math.round(value * 100)}%`,
+        formatter: (
+          value: number
+        ) =>
+          `${Math.round(
+            value * 100
+          )}%`,
       },
+
       splitLine: {
         lineStyle: {
           color: "#e7ebf2",
@@ -103,19 +175,25 @@ export default function RibbonLikeChart({
     },
 
     series: [
-      ...series,
+      ...factorySeries,
 
       {
         name: "Target",
         type: "line",
         symbol: "none",
         silent: true,
-        data: periods.map(() => TARGET),
+
+        data:
+          periods.map(
+            () => TARGET
+          ),
+
         lineStyle: {
           type: "dashed",
           width: 2,
           color: "#25a7c4",
         },
+
         label: {
           show: false,
         },
@@ -123,11 +201,49 @@ export default function RibbonLikeChart({
     ],
   };
 
+  const handleClick = (
+    params: any
+  ) => {
+    if (
+      params.componentType !==
+      "series"
+    ) {
+      return;
+    }
+
+    if (
+      params.seriesName ===
+      "Target"
+    ) {
+      return;
+    }
+
+    if (
+      params.seriesName &&
+      onFactorySelect
+    ) {
+      onFactorySelect(
+        String(
+          params.seriesName
+        )
+      );
+    }
+  };
+
   return (
     <ReactECharts
       option={option}
-      notMerge
-      style={{ width: "100%", height: "280px" }}
+      notMerge={true}
+      lazyUpdate={true}
+
+      style={{
+        width: "100%",
+        height: "280px",
+      }}
+
+      onEvents={{
+        click: handleClick,
+      }}
     />
   );
 }
