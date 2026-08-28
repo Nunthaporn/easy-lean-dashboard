@@ -20,28 +20,82 @@ interface Props {
 
 const TARGET = 0.65;
 const FACTORY_ORDER = ["G1", "G2", "G3", "G4", "TRM", "EA"];
+const PRODUCT_COLORS = [
+  "#00a67d",
+  "#5bdc20",
+  "#2c8ce5",
+  "#16b9c7",
+  "#1812a8",
+  "#ffd91a",
+  "#ff8b2c",
+  "#ef4b87",
+  "#8a63d2",
+  "#d6692f",
+];
 
-function productTypeHtml(productTypes?: ProductTypeEff[]) {
-  if (!productTypes?.length) {
-    return `<div style="margin-top:8px;color:#94a3b8">Eff% by Product Type: No data</div>`;
+function escapeHtml(value: string) {
+  return value.replace(/[&<>"']/g, (char) => ({
+    "&": "&amp;",
+    "<": "&lt;",
+    ">": "&gt;",
+    '"': "&quot;",
+    "'": "&#39;",
+  }[char] ?? char));
+}
+
+function productColor(name: string) {
+  let hash = 0;
+  for (let i = 0; i < name.length; i += 1) {
+    hash = ((hash << 5) - hash + name.charCodeAt(i)) | 0;
   }
+  return PRODUCT_COLORS[Math.abs(hash) % PRODUCT_COLORS.length];
+}
+
+function productTypeHtml(row: LatestLineRow) {
+  const productTypes = (row.product_types ?? [])
+    .filter((item) => item.eff_pct != null && Number.isFinite(Number(item.eff_pct)))
+    .sort((a, b) => Number(b.eff_pct) - Number(a.eff_pct));
+
+  const subtitle = `${escapeHtml(row.factory ?? "-")} · Line ${escapeHtml(String(row.line))}`;
+
+  if (!productTypes.length) {
+    return `
+      <div style="padding:12px 14px;min-width:260px">
+        <div style="font-size:12px;font-weight:700;color:#24324a">EFF% by Product Type</div>
+        <div style="font-size:10px;color:#7b8799;margin-top:5px">${subtitle}</div>
+        <div style="margin-top:12px;color:#94a3b8;font-size:11px">No Product Type data</div>
+      </div>
+    `;
+  }
+
+  const maximum = Math.max(
+    ...productTypes.map((item) => Number(item.eff_pct) || 0),
+    0.01,
+  );
 
   const rows = productTypes
     .map((item) => {
-      const value = item.eff_pct == null
-        ? "-"
-        : `${(Number(item.eff_pct) * 100).toFixed(1)}%`;
+      const value = Number(item.eff_pct);
+      const width = Math.max(8, Math.min(205, (value / maximum) * 205));
+      const label = escapeHtml(item.product_type || "OTHER");
+      const color = productColor(item.product_type || "OTHER");
 
-      return `<div style="display:flex;justify-content:space-between;gap:18px;margin-top:3px">
-        <span>${item.product_type}</span>
-        <strong>${value}</strong>
-      </div>`;
+      return `
+        <div style="margin-top:13px">
+          <div style="font-size:10px;color:#536176;margin-bottom:6px">${label}</div>
+          <div style="display:flex;align-items:center;gap:9px">
+            <span style="display:block;width:${width}px;max-width:205px;height:15px;border-radius:2px;background:${color}"></span>
+            <b style="font-size:11px;color:#172033;white-space:nowrap">${(value * 100).toFixed(1)}%</b>
+          </div>
+        </div>
+      `;
     })
     .join("");
 
   return `
-    <div style="margin-top:9px;padding-top:7px;border-top:1px solid #e2e8f0">
-      <strong>Eff% by Product Type</strong>
+    <div style="padding:12px 14px;min-width:270px">
+      <div style="font-size:12px;font-weight:700;color:#24324a">EFF% by Product Type</div>
+      <div style="font-size:10px;color:#7b8799;margin-top:5px">${subtitle}</div>
       ${rows}
     </div>
   `;
@@ -108,24 +162,19 @@ export default function LatestLineChart({
     tooltip: {
       trigger: "item",
       confine: true,
+      backgroundColor: "#ffffff",
+      borderColor: "#d7dee8",
+      borderWidth: 1,
+      padding: 0,
+      extraCssText:
+        "box-shadow:0 8px 24px rgba(20,35,60,.18);border-radius:4px;",
       formatter: (params: any) => {
         if (params.seriesName === "__factory_separator__") return "";
 
         const row = sortedData[params.dataIndex];
         if (!row) return "";
 
-        const eff = row.eff_pct == null
-          ? "-"
-          : `${(Number(row.eff_pct) * 100).toFixed(1)}%`;
-
-        return `
-          <div style="min-width:230px">
-            <strong>${row.factory ?? "-"}</strong><br/>
-            Line: ${row.line}<br/>
-            EFF%: ${eff}
-            ${productTypeHtml(row.product_types)}
-          </div>
-        `;
+        return productTypeHtml(row);
       },
     },
     grid: {
