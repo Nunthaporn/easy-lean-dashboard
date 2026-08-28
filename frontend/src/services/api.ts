@@ -5,10 +5,11 @@ import type {
   FilterMeta,
 } from "../types/dashboard";
 
+// In the unified Nanyang app, all Easy Lean requests must go through the
+// parent Vite /api proxy (which points to the unified FastAPI backend).
+// VITE_API_BASE_URL can still override this for standalone deployments.
 const API_BASE_URL =
-  import.meta.env
-    .VITE_API_BASE_URL ||
-  `${window.location.protocol}//${window.location.hostname}:8001`;
+  import.meta.env.VITE_API_BASE_URL || "";
 
 const api = axios.create({
   baseURL: API_BASE_URL,
